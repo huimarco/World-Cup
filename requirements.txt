@@ -1,0 +1,6 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+aiohttp>=3.10
+requests>=2.32
+truststore>=0.9
+certifi>=2024.0
