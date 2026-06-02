@@ -276,6 +276,27 @@ def _is_yes_no(outs):
     return {str(o).strip().lower() for o in outs} == {"yes", "no"}
 
 
+def _pm_yes_ask(m, outs, prices):
+    """Cost to BUY the 'Yes' share of a Polymarket Yes/No market (0..1).
+
+    This is the ask price — what you actually pay to execute — not the mid in
+    `outcomePrices`. Gamma quotes `bestAsk`/`bestBid` on the first outcome
+    token: when 'Yes' is outcome 0 its ask is `bestAsk`; when 'Yes' is outcome
+    1, buying it equals selling outcome 0 at its bid, i.e. `1 - bestBid`.
+    Falls back to the mid (`outcomePrices`) when the book side is missing.
+    """
+    yes_idx = 0 if str(outs[0]).strip().lower() == "yes" else 1
+    if yes_idx == 0:
+        ask = _f(m.get("bestAsk"))
+        if ask is not None and ask:
+            return ask
+    else:
+        bid = _f(m.get("bestBid"))
+        if bid is not None and bid:
+            return 1.0 - bid
+    return _f(prices[yes_idx], 0.0) or 0.0
+
+
 # group titles that are spread/total lines, not teams (e.g. "MEX -1.5", "Over 2.5")
 _LINE_TITLE = re.compile(r"[+-]?\d+\.\d|\bover\b|\bunder\b", re.IGNORECASE)
 
@@ -313,14 +334,17 @@ def _pm_extract(ev):
         if _is_yes_no(outs):
             if not git:
                 continue  # a lone yes/no with no outcome label is unusable
-            yes_idx = 0 if str(outs[0]).strip().lower() == "yes" else 1
-            group.append((_norm_outcome(git), _f(prices[yes_idx], 0.0) or 0.0, vol))
+            group.append((_norm_outcome(git), _pm_yes_ask(m, outs, prices), vol))
             group_vol += vol
         else:
             if direct is None or vol > direct[2]:
                 direct = (outs, prices, vol)
 
     if direct:
+        # Multi-outcome single market: Gamma exposes only one scalar bestAsk
+        # (for outcome 0), so there's no per-outcome ask to use here. Fall back
+        # to the mid in outcomePrices. World Cup moneylines use the Yes/No group
+        # path above, which does use the ask.
         outs, prices, vol = direct
         outcomes = [{"label": _norm_outcome(str(o)), "prob": _f(p, 0.0) or 0.0} for o, p in zip(outs, prices)]
         return outcomes, vol
@@ -453,12 +477,11 @@ async def fetch_kalshi(session: aiohttp.ClientSession) -> list[dict]:
 
 
 def _kalshi_prob(mk: dict) -> float:
-    """Implied probability from a Kalshi binary market: mid of yes bid/ask in
-    dollars (0..1), falling back to last traded price."""
-    yb = _f(mk.get("yes_bid_dollars"))
+    """Implied probability from a Kalshi binary market: yes ask price in
+    dollars (0..1) — cost to buy, falling back to last traded price."""
     ya = _f(mk.get("yes_ask_dollars"))
-    if yb is not None and ya is not None and (yb or ya):
-        return (yb + ya) / 2.0
+    if ya is not None and ya:
+        return ya
     return _f(mk.get("last_price_dollars"), 0.0) or 0.0
 
 

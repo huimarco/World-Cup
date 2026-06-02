@@ -83,5 +83,10 @@ and tournament-winner futures.
 | `WC_KALSHI_SERIES` | the 4 above | Kalshi series tickers (comma-sep) |
 | `WC_ENABLE_PM` / `WC_ENABLE_KALSHI` | `1` | Set `0` to disable a source |
 
+## To-Do
+
+- [x] Use actual **ask price** (cost to execute a position, not mid/last)
+- [ ] Apply **platform fee haircut** when comparing prices across Polymarket and Kalshi
+
 *Not affiliated with FIFA, Kalshi, or Polymarket. Informational only — not
 trading advice.*
